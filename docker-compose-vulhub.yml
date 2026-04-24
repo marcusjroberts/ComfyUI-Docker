@@ -11,7 +11,7 @@ services:
       - "8189:8188"
     stdin_open: true
     tty: true
-    command: ["python", "/app/ComfyUI/main.py", "--listen", "0.0.0.0"]
+    command: ["python", "/app/ComfyUI/main.py", "--listen", "0.0.0.0", "--reserve-vram", "8"]
     volumes:
       - d:/comfyui/models:/app/ComfyUI/models:rw
       - d:/comfyui/output:/app/ComfyUI/output:rw
