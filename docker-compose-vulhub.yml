@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  comfyui-vulhub:
+    image: comfyui:latest
+    container_name: comfyui-vulhub
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "8189:8188"
+    stdin_open: true
+    tty: true
+    command: ["python", "/app/ComfyUI/main.py", "--listen", "0.0.0.0", "--reserve-vram", "8"]
+    volumes:
+      - d:/comfyui/models:/app/ComfyUI/models:rw
+      - d:/comfyui/output:/app/ComfyUI/output:rw
+      - d:/comfyui-vulhub/user:/app/ComfyUI/user:rw
