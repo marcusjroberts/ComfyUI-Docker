@@ -65,33 +65,45 @@ declare -A REPOS=(
   ["rgthree-comfy"]="https://github.com/rgthree/rgthree-comfy.git"
   ["ComfyUI-KJNodes"]="https://github.com/kijai/ComfyUI-KJNodes.git"
   ["ComfyUI_UltimateSDUpscale"]="https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git"
+  ["ComfyUI-Impact-Pack"]="https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"
+  ["ComfyUI-Impact-Subpack"]="https://github.com/ltdrdata/ComfyUI-Impact-Subpack.git"
 )
 
-if [ ! -f "$INIT_MARKER" ]; then
-  echo "↳ First run: initializing custom_nodes…"
-  mkdir -p "$CN_DIR"
-  for name in "${!REPOS[@]}"; do
-    url="${REPOS[$name]}"
-    target="$CN_DIR/$name"
-    if [ -d "$target" ]; then
-      echo "  ↳ $name already exists, skipping clone"
-    else
-      echo "  ↳ Cloning $name"
-      git clone --depth 1 "$url" "$target"
-    fi
-  done
+mkdir -p "$CN_DIR"
 
-  echo "↳ Installing/upgrading dependencies…"
+# Clone any missing repos (idempotent per-node — handles repos added after first run)
+NEW_NODES=()
+for name in "${!REPOS[@]}"; do
+  url="${REPOS[$name]}"
+  target="$CN_DIR/$name"
+  if [ -d "$target" ]; then
+    echo "  ↳ $name already exists, skipping clone"
+  else
+    echo "  ↳ Cloning $name"
+    git clone --depth 1 "$url" "$target"
+    NEW_NODES+=("$name")
+  fi
+done
+
+if [ ! -f "$INIT_MARKER" ]; then
+  echo "↳ First run: installing dependencies for all custom nodes…"
   for dir in "$CN_DIR"/*/; do
     req="$dir/requirements.txt"
     if [ -f "$req" ]; then
       echo "  ↳ pip install --upgrade -r $req"
-      python -m pip install --no-cache-dir --upgrade -r "$req"
+      python -m pip install --no-cache-dir --break-system-packages --upgrade -r "$req"
     fi
   done
-
-  # Create marker file
   touch "$INIT_MARKER"
+elif [ ${#NEW_NODES[@]} -gt 0 ]; then
+  echo "↳ Installing dependencies for newly-cloned nodes: ${NEW_NODES[*]}"
+  for name in "${NEW_NODES[@]}"; do
+    req="$CN_DIR/$name/requirements.txt"
+    if [ -f "$req" ]; then
+      echo "  ↳ pip install --upgrade -r $req"
+      python -m pip install --no-cache-dir --break-system-packages --upgrade -r "$req"
+    fi
+  done
 else
   echo "↳ Custom nodes already initialized, skipping clone and dependency installation."
 fi
