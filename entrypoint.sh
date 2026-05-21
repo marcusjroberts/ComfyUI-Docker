@@ -86,27 +86,39 @@ for name in "${!REPOS[@]}"; do
   fi
 done
 
-if [ ! -f "$INIT_MARKER" ]; then
-  echo "↳ First run: installing dependencies for all custom nodes…"
-  for dir in "$CN_DIR"/*/; do
-    req="$dir/requirements.txt"
-    if [ -f "$req" ]; then
-      echo "  ↳ pip install --upgrade -r $req"
-      python -m pip install --no-cache-dir --break-system-packages --upgrade -r "$req"
-    fi
-  done
-  touch "$INIT_MARKER"
-elif [ ${#NEW_NODES[@]} -gt 0 ]; then
-  echo "↳ Installing dependencies for newly-cloned nodes: ${NEW_NODES[*]}"
-  for name in "${NEW_NODES[@]}"; do
-    req="$CN_DIR/$name/requirements.txt"
-    if [ -f "$req" ]; then
-      echo "  ↳ pip install --upgrade -r $req"
-      python -m pip install --no-cache-dir --break-system-packages --upgrade -r "$req"
-    fi
-  done
-else
-  echo "↳ Custom nodes already initialized, skipping clone and dependency installation."
+# Per-node install markers live in /tmp (container writable layer): they
+# survive `docker restart` (fast subsequent boots) but not a container
+# rebuild. A rebuild wipes pip's site-packages too — so the markers and
+# the actual installs go together, and a fresh container reinstalls
+# everything cleanly. The single legacy $INIT_MARKER on the host volume
+# is ignored — it persists across rebuilds and used to skip installs even
+# when pip packages were gone (e.g. RES4LYF after a rebuild on 2026-05-20).
+echo "↳ Checking custom_node dependencies…"
+INSTALLED_ANY=0
+INSTALL_FAILED=()
+for dir in "$CN_DIR"/*/; do
+  [ -d "$dir" ] || continue
+  name="$(basename "$dir")"
+  req="$dir/requirements.txt"
+  marker="/tmp/.deps.${name}"
+  [ -f "$req" ] || continue
+  if [ -f "$marker" ]; then
+    continue
+  fi
+  echo "  ↳ Installing $name requirements"
+  if python -m pip install --no-cache-dir --break-system-packages --upgrade -r "$req"; then
+    touch "$marker"
+    INSTALLED_ANY=1
+  else
+    INSTALL_FAILED+=("$name")
+    echo "  ✗ pip install failed for $name — will retry on next start"
+  fi
+done
+if [ $INSTALLED_ANY -eq 0 ] && [ ${#INSTALL_FAILED[@]} -eq 0 ]; then
+  echo "↳ All custom_node deps already installed for this container."
+fi
+if [ ${#INSTALL_FAILED[@]} -gt 0 ]; then
+  echo "↳ ⚠ Failed installs: ${INSTALL_FAILED[*]} — container will start anyway, retry on next launch."
 fi
 
 echo "↳ Launching ComfyUI"
